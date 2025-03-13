@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 type NebulaProps = {
-  stage: 'collection' | 'collapse' | 'ignition' | 'complete';
+  stage: 'collection' | 'collapse' | 'ignition' | 'complete' | 'failed';
 };
 
 export default function Nebula({ stage }: NebulaProps) {
@@ -45,6 +45,8 @@ export default function Nebula({ stage }: NebulaProps) {
           return ['rgba(255, 100, 50, 0.5)', 'rgba(255, 80, 0, 0.4)'];
         case 'complete':
           return ['rgba(255, 200, 50, 0.6)', 'rgba(255, 150, 0, 0.5)'];
+        case 'failed':
+          return ['rgba(80, 10, 30, 0.3)', 'rgba(30, 10, 20, 0.2)'];
         default:
           return ['rgba(30, 20, 70, 0.4)', 'rgba(60, 10, 80, 0.3)'];
       }
@@ -98,8 +100,39 @@ export default function Nebula({ stage }: NebulaProps) {
         ctx.fill();
       }
       
+      // Handle different stage visuals
+      if (stage === 'failed') {
+        // Draw dispersing particles for failed star
+        const numParticles = 20;
+        const disperseRadius = 150 + angle * 30;
+        
+        for (let i = 0; i < numParticles; i++) {
+          const particleAngle = (i / numParticles) * Math.PI * 2;
+          const x = canvas.width/2 + Math.cos(particleAngle) * disperseRadius * (0.5 + Math.random() * 0.5);
+          const y = canvas.height/2 + Math.sin(particleAngle) * disperseRadius * (0.5 + Math.random() * 0.5);
+          
+          ctx.beginPath();
+          ctx.arc(x, y, 2 + Math.random() * 3, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 50, 50, ' + (0.8 - angle/20) + ')';
+          ctx.fill();
+        }
+        
+        // Unstable core
+        const coreGradient = ctx.createRadialGradient(
+          canvas.width/2, canvas.height/2, 0,
+          canvas.width/2, canvas.height/2, 40
+        );
+        coreGradient.addColorStop(0, 'rgba(100, 0, 0, 0.5)');
+        coreGradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.3)');
+        coreGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
+        ctx.beginPath();
+        ctx.fillStyle = coreGradient;
+        ctx.arc(canvas.width/2, canvas.height/2, 40, 0, Math.PI * 2);
+        ctx.fill();
+      }
       // Draw glowing center for later stages
-      if (stage === 'collapse' || stage === 'ignition' || stage === 'complete') {
+      else if (stage === 'collapse' || stage === 'ignition' || stage === 'complete') {
         const centerRadius = stage === 'complete' ? 100 : 
                              stage === 'ignition' ? 50 : 20;
         
@@ -172,7 +205,8 @@ export default function Nebula({ stage }: NebulaProps) {
         ctx.fill();
       }
       
-      angle += stage === 'ignition' ? 0.02 : 0.005;
+      angle += stage === 'ignition' ? 0.02 : 
+               stage === 'failed' ? 0.05 : 0.005;
       animationFrameId = requestAnimationFrame(render);
     };
     

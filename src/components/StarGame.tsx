@@ -30,6 +30,9 @@ export default function StarGame() {
   const [gravity, setGravity] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [starType, setStarType] = useState<StarType>('yellow_dwarf');
+  const [hint, setHint] = useState<string>('Move your cursor to attract particles');
+  const [showHint, setShowHint] = useState<boolean>(true);
+  const [firstCollection, setFirstCollection] = useState<boolean>(false);
   
   // Check for stage progression and determine star type outcome
   useEffect(() => {
@@ -38,6 +41,8 @@ export default function StarGame() {
         resources.hydrogen >= HYDROGEN_TARGET && 
         resources.dust >= DUST_TARGET) {
       setStage('collapse');
+      setShowHint(true); // Show hint for the next stage
+      setHint('Adjust temperature and gravity to form your star');
     }
     
     // Progress to ignition stage or fail based on temperature and gravity
@@ -67,6 +72,7 @@ export default function StarGame() {
         
         // Star successfully begins to form
         setStage('ignition');
+        setShowHint(false);
         setTimeout(() => {
           setStage('complete');
           setShowSuccess(true);
@@ -74,6 +80,35 @@ export default function StarGame() {
       }
     }
   }, [resources, temperature, gravity, stage]);
+  
+  // Track first collection to update hints
+  useEffect(() => {
+    if (!firstCollection && (resources.hydrogen > 0 || resources.dust > 0)) {
+      setFirstCollection(true);
+      setHint('Great! Keep collecting until the bars fill up');
+      
+      // Auto-hide this hint after 5 seconds
+      const timer = setTimeout(() => {
+        setShowHint(false);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [resources, firstCollection]);
+  
+  // Auto-hide hints after some time
+  useEffect(() => {
+    if (showHint) {
+      const timer = setTimeout(() => {
+        // Don't auto-hide the initial hint until they start collecting
+        if (firstCollection || stage !== 'collection') {
+          setShowHint(false);
+        }
+      }, 8000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [showHint, firstCollection, stage]);
   
   // Determine the type of star created based on temperature and gravity ratios
   const determineStarType = (temp: number, grav: number) => {
@@ -125,12 +160,24 @@ export default function StarGame() {
   const handleTemperatureChange = (value: number) => {
     if (stage === 'collapse') {
       setTemperature(value);
+      
+      // Show hint if temperature becomes dangerously high
+      if (value > TEMPERATURE_TARGET * 1.5 && !showHint) {
+        setHint('Warning: Temperature is getting dangerously high!');
+        setShowHint(true);
+      }
     }
   };
 
   const handleGravityChange = (value: number) => {
     if (stage === 'collapse') {
       setGravity(value);
+      
+      // Show hint if gravity becomes dangerously high
+      if (value > GRAVITY_TARGET * 1.5 && !showHint) {
+        setHint('Warning: Gravity is getting dangerously high!');
+        setShowHint(true);
+      }
     }
   };
 
@@ -141,6 +188,9 @@ export default function StarGame() {
     setGravity(0);
     setShowSuccess(false);
     setStarType('yellow_dwarf');
+    setFirstCollection(false);
+    setHint('Move your cursor to attract particles');
+    setShowHint(true);
   };
 
   // Get description for current star type
@@ -164,7 +214,7 @@ export default function StarGame() {
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* Background nebula */}
-      <Nebula stage={stage === 'failed' ? 'collection' : stage} />
+      <Nebula stage={stage} />
 
       {/* Game stage display */}
       <div className="absolute top-4 left-4 bg-black/50 text-white px-4 py-2 rounded-lg z-10">
@@ -174,6 +224,18 @@ export default function StarGame() {
         {stage === 'complete' && `Star Formation Complete: ${starType.replace('_', ' ').toUpperCase()}`}
         {stage === 'failed' && "Star Formation Failed!"}
       </div>
+
+      {/* Gameplay hints */}
+      {showHint && (
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-indigo-900/70 text-white px-6 py-3 rounded-lg z-30 mt-4 shadow-lg border border-indigo-400 animate-pulse">
+          <div className="flex items-center space-x-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p>{hint}</p>
+          </div>
+        </div>
+      )}
 
       {/* Resource particles - only visible during collection stage */}
       {stage === 'collection' && (
@@ -207,21 +269,39 @@ export default function StarGame() {
               max={DUST_TARGET} 
               color="amber" 
             />
-            <p className="text-white text-sm mt-1">
-              Move around to collect particles!
-            </p>
+            <div className="flex justify-between items-center mt-2">
+              <p className="text-white text-sm">
+                Move your cursor to collect particles
+              </p>
+              <button 
+                onClick={() => setShowHint(true)} 
+                className="text-indigo-300 text-xs hover:text-indigo-200 focus:outline-none"
+              >
+                Need help?
+              </button>
+            </div>
           </div>
         )}
 
         {stage === 'collapse' && (
-          <Controls 
-            temperature={temperature}
-            gravity={gravity}
-            onTemperatureChange={handleTemperatureChange}
-            onGravityChange={handleGravityChange}
-            temperatureTarget={TEMPERATURE_TARGET}
-            gravityTarget={GRAVITY_TARGET}
-          />
+          <>
+            <Controls 
+              temperature={temperature}
+              gravity={gravity}
+              onTemperatureChange={handleTemperatureChange}
+              onGravityChange={handleGravityChange}
+              temperatureTarget={TEMPERATURE_TARGET}
+              gravityTarget={GRAVITY_TARGET}
+            />
+            <div className="flex justify-center mt-1">
+              <button 
+                onClick={() => setShowHint(true)} 
+                className="text-indigo-300 text-xs hover:text-indigo-200 focus:outline-none"
+              >
+                Show hint
+              </button>
+            </div>
+          </>
         )}
 
         {(stage === 'ignition' || stage === 'complete') && (
@@ -242,7 +322,7 @@ export default function StarGame() {
 
       {/* Warning flash for dangerous values */}
       {stage === 'collapse' && (temperature > TEMPERATURE_TARGET * 1.5 || gravity > GRAVITY_TARGET * 1.5) && (
-        <div className={`absolute inset-0 bg-red-500/20 pointer-events-none z-10 ${
+        <div className={`absolute inset-0 bg-red-500/20 pointer-events-none z-5 ${
           temperature > TEMPERATURE_TARGET * 1.7 || gravity > GRAVITY_TARGET * 1.7 ? 'animate-pulse' : ''
         }`} />
       )}
