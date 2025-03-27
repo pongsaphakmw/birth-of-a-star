@@ -4,9 +4,11 @@ import { useEffect, useRef } from 'react';
 
 type NebulaProps = {
   stage: 'collection' | 'collapse' | 'ignition' | 'complete' | 'failed';
+  temperature?: number; // Added to support temperature prop
+  gravity?: number; // Added to support gravity prop
 };
 
-export default function Nebula({ stage }: NebulaProps) {
+export default function Nebula({ stage, temperature = 0, gravity = 0 }: NebulaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   useEffect(() => {
@@ -71,15 +73,35 @@ export default function Nebula({ stage }: NebulaProps) {
       // Draw nebula clouds
       const colors = getNebulaColors();
       
-      // Draw nebula clouds with gradient
+      // Draw nebula clouds with gradient - modify based on temperature and gravity when in collapse stage
       for (let i = 0; i < 3; i++) {
         const radius = 100 + i * 50;
+        
+        // Apply temperature and gravity effects to the nebula in collapse stage
+        const tempModifier = stage === 'collapse' ? (temperature / 150) : 0;
+        const gravModifier = stage === 'collapse' ? (gravity / 140) : 0;
+        
+        // Adjust radius based on gravity
+        const adjustedRadius = radius * (1 + (gravModifier * 0.3));
+        
+        // Create gradient with temperature-influenced colors
         const gradient = ctx.createRadialGradient(
           canvas.width/2, canvas.height/2, 0,
-          canvas.width/2, canvas.height/2, radius * 2
+          canvas.width/2, canvas.height/2, adjustedRadius * 2
         );
         
-        gradient.addColorStop(0, colors[0]);
+        // Modify colors based on temperature (redder for higher temp)
+        const baseColor = colors[0];
+        let tempColor = baseColor;
+        if (stage === 'collapse' && temperature > 0) {
+          const r = Math.min(255, parseInt(baseColor.slice(5, 8)) + Math.floor(tempModifier * 100));
+          const g = Math.max(0, parseInt(baseColor.slice(9, 12)) - Math.floor(tempModifier * 20));
+          const b = Math.max(0, parseInt(baseColor.slice(13, 16)) - Math.floor(tempModifier * 50));
+          const a = parseFloat(baseColor.slice(17, -1));
+          tempColor = `rgba(${r}, ${g}, ${b}, ${a})`;
+        }
+        
+        gradient.addColorStop(0, tempColor);
         gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
         
         ctx.beginPath();
@@ -87,13 +109,13 @@ export default function Nebula({ stage }: NebulaProps) {
         
         // Create cloud-like shapes
         for (let j = 0; j < 6; j++) {
-          const offsetX = Math.cos(angle + j) * radius * 0.2;
-          const offsetY = Math.sin(angle + j) * radius * 0.2;
+          const offsetX = Math.cos(angle + j) * adjustedRadius * 0.2;
+          const offsetY = Math.sin(angle + j) * adjustedRadius * 0.2;
           ctx.ellipse(
             canvas.width/2 + offsetX, 
             canvas.height/2 + offsetY, 
-            radius + Math.sin(angle * 3 + j) * 20, 
-            radius + Math.cos(angle * 2 + j) * 20, 
+            adjustedRadius + Math.sin(angle * 3 + j) * 20, 
+            adjustedRadius + Math.cos(angle * 2 + j) * 20, 
             angle / 5, 0, Math.PI * 2
           );
         }
@@ -216,7 +238,7 @@ export default function Nebula({ stage }: NebulaProps) {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [stage]);
+  }, [stage, temperature, gravity]);
   
   // Handle window resize
   useEffect(() => {

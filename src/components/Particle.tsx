@@ -27,11 +27,59 @@ type ParticleData = {
 // Counter for generating unique IDs
 let particleIdCounter = 0;
 
+// Determine particle color based on type and subtype
+const getParticleColor = (particleType: ParticleType, dustSubtype?: DustSubtype) => {
+  if (particleType === 'hydrogen') {
+    return '#1E90FF'; // Bright blue for hydrogen
+  }
+  
+  // Colors for different dust types
+  switch (dustSubtype) {
+    case 'iron':
+      return '#CD853F'; // Sandy brown for iron
+    case 'silicate':
+      return '#E6E6FA'; // Lavender for silicate
+    case 'nickel':
+      return '#B0C4DE'; // Light steel blue for nickel
+    case 'carbon':
+      return '#696969'; // Dim gray for carbon
+    default:
+      return '#CD853F'; // Default dust color
+  }
+};
+
+// Add a new component for collection animation
+type CollectionAnimationProps = {
+  x: number;
+  y: number;
+  type: ParticleType;
+  dustSubtype?: DustSubtype;
+};
+
+const CollectionAnimation = ({ x, y, type, dustSubtype }: CollectionAnimationProps) => {
+  return (
+    <div
+      className="absolute rounded-full animate-ping z-30"
+      style={{
+        left: `${x}px`,
+        top: `${y}px`,
+        width: '30px',
+        height: '30px',
+        backgroundColor: getParticleColor(type, dustSubtype),
+        opacity: 0,
+        animation: 'ping 0.8s cubic-bezier(0, 0, 0.2, 1)'
+      }}
+    />
+  );
+};
+
 export default function Particle({ type, count, onCollect }: ParticleProps) {
   const [particles, setParticles] = useState<ParticleData[]>([]);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isMouseInCanvas, setIsMouseInCanvas] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [collectionAnimations, setCollectionAnimations] = useState<{id: number, x: number, y: number, type: ParticleType, dustSubtype?: DustSubtype}[]>([]);
+  let animationIdCounter = 0;
   
   // Create a single particle with the given type
   const createParticle = (particleType: ParticleType) => {
@@ -183,6 +231,40 @@ export default function Particle({ type, count, onCollect }: ParticleProps) {
           // Check if particle is within collection range and mouse is in canvas
           if (isMouseInCanvas && distance < collectionRange) {
             if (!particle.collected) {
+              // Add collection animation
+              setCollectionAnimations(prev => [
+                ...prev, 
+                {
+                  id: animationIdCounter++,
+                  x: particle.x,
+                  y: particle.y,
+                  type: particle.particleType,
+                  dustSubtype: particle.dustSubtype
+                }
+              ]);
+              
+              // Play collection sound effect (if enabled)
+              if (typeof window !== 'undefined') {
+                try {
+                  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                  const oscillator = audioContext.createOscillator();
+                  const gainNode = audioContext.createGain();
+                  
+                  // Different pitches for different particle types
+                  oscillator.frequency.value = particle.particleType === 'hydrogen' ? 440 : 330;
+                  oscillator.type = 'sine';
+                  
+                  gainNode.gain.value = 0.1; // Low volume
+                  oscillator.connect(gainNode);
+                  gainNode.connect(audioContext.destination);
+                  
+                  oscillator.start();
+                  oscillator.stop(audioContext.currentTime + 0.1);
+                } catch (e) {
+                  // Fail silently if audio context is not supported
+                }
+              }
+              
               collectedParticles.push({
                 type: particle.particleType,
                 dustSubtype: particle.dustSubtype,
@@ -229,6 +311,11 @@ export default function Particle({ type, count, onCollect }: ParticleProps) {
         });
       });
       
+      // Clean up old animations
+      setCollectionAnimations(prev => 
+        prev.filter(anim => now - anim.id < 800) // Remove animations after they complete
+      );
+      
       // Process collected particles in batches
       if (collectedParticles.length > 0 && now - lastCollectionTime > 200) {
         // Count hydrogen particles
@@ -273,27 +360,6 @@ export default function Particle({ type, count, onCollect }: ParticleProps) {
     return () => clearInterval(cleanupInterval);
   }, []);
 
-  // Determine particle color based on type and subtype
-  const getParticleColor = (particleType: ParticleType, dustSubtype?: DustSubtype) => {
-    if (particleType === 'hydrogen') {
-      return '#1E90FF'; // Bright blue for hydrogen
-    }
-    
-    // Colors for different dust types
-    switch (dustSubtype) {
-      case 'iron':
-        return '#CD853F'; // Sandy brown for iron
-      case 'silicate':
-        return '#E6E6FA'; // Lavender for silicate
-      case 'nickel':
-        return '#B0C4DE'; // Light steel blue for nickel
-      case 'carbon':
-        return '#696969'; // Dim gray for carbon
-      default:
-        return '#CD853F'; // Default dust color
-    }
-  };
-  
   // Get particle label based on type and subtype
   const getParticleLabel = (particleType: ParticleType, dustSubtype?: DustSubtype) => {
     if (particleType === 'hydrogen') return 'H';
@@ -326,7 +392,7 @@ export default function Particle({ type, count, onCollect }: ParticleProps) {
               height: `${particle.size}px`,
               backgroundColor: getParticleColor(particle.particleType, particle.dustSubtype),
               opacity: 0.8,
-              transition: 'transform 0.2s ease-out',
+              transition: 'transform 0.2s ease-out, opacity 0.2s ease-out',
               transform: `scale(${isMouseInCanvas ? 1 : 0.8})`
             }}
           >
@@ -334,6 +400,32 @@ export default function Particle({ type, count, onCollect }: ParticleProps) {
           </div>
         )
       ))}
+      
+      {/* Render collection animations */}
+      {collectionAnimations.map(anim => (
+        <CollectionAnimation 
+          key={anim.id} 
+          x={anim.x} 
+          y={anim.y} 
+          type={anim.type} 
+          dustSubtype={anim.dustSubtype}
+        />
+      ))}
+      
+      {/* Visual indicator for particle attraction range */}
+      {isMouseInCanvas && (
+        <div
+          className="absolute rounded-full border-2 border-white/20 pointer-events-none z-10"
+          style={{
+            left: `${mousePos.x - 150}px`, // 150 is the attraction range
+            top: `${mousePos.y - 150}px`,
+            width: '300px',
+            height: '300px',
+            opacity: 0.3,
+            transition: 'opacity 0.3s ease'
+          }}
+        />
+      )}
     </div>
   );
 }

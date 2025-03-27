@@ -1,5 +1,4 @@
 'use client';
-
 import { useEffect, useState, useRef } from 'react';
 import Nebula from './Nebula';
 import Particle from './Particle';
@@ -19,6 +18,39 @@ const DUST_TARGET = 50;
 const TEMPERATURE_TARGET = 80;
 const GRAVITY_TARGET = 70;
 
+// Help content for each stage
+const HELP_CONTENT = {
+  collection: {
+    title: "Collection Stage Help",
+    content: [
+      "Move your cursor around the screen to attract hydrogen (H) and dust particles.",
+      "Hydrogen is the main fuel for stars – you need to collect enough for fusion to begin.",
+      "Dust contains heavier elements that help gravity pull the cloud together.",
+      "The attraction field around your cursor will pull in nearby particles.",
+      "Fill both progress bars to proceed to the next stage."
+    ]
+  },
+  collapse: {
+    title: "Gravitational Collapse Help",
+    content: [
+      "Use the sliders to adjust temperature and gravity to create your star.",
+      "Temperature: Controls the heat energy in the core - too low and fusion won't start, too high and it becomes unstable.",
+      "Gravity: Determines how much the cloud compresses - too low and the cloud dissipates, too high and it collapses completely.",
+      "Watch the visual representation of your proto-star to see how your changes affect it.",
+      "Find the 'Perfect!' balance for both values to successfully ignite fusion."
+    ]
+  },
+  ignition: {
+    title: "Ignition Stage Info",
+    content: [
+      "Success! The cloud has enough heat and pressure to begin nuclear fusion.",
+      "The hydrogen atoms are fusing into helium, releasing massive amounts of energy.",
+      "This energy is now balancing against the inward pull of gravity.",
+      "Congratulations on creating a stable star!"
+    ]
+  }
+};
+
 export default function StarGame() {
   // Game state
   const [stage, setStage] = useState<GameStage>('collection');
@@ -33,53 +65,34 @@ export default function StarGame() {
   const [hint, setHint] = useState<string>('Move your cursor to attract particles');
   const [showHint, setShowHint] = useState<boolean>(true);
   const [firstCollection, setFirstCollection] = useState<boolean>(false);
+  const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [collectionRate, setCollectionRate] = useState<{hydrogen: number, dust: number}>({hydrogen: 0, dust: 0});
+  const [showProgressIndicator, setShowProgressIndicator] = useState<boolean>(false);
+  const [lastResources, setLastResources] = useState<{hydrogen: number, dust: number}>({hydrogen: 0, dust: 0});
+  const [accessibilityMode, setAccessibilityMode] = useState<boolean>(false);
   
-  // Check for stage progression and determine star type outcome
+  // Check for stage progression
   useEffect(() => {
     // Progress to gravity collapse stage
     if (stage === 'collection' && 
         resources.hydrogen >= HYDROGEN_TARGET && 
         resources.dust >= DUST_TARGET) {
-      setStage('collapse');
-      setShowHint(true); // Show hint for the next stage
-      setHint('Adjust temperature and gravity to form your star');
+      
+      // Show transition animation
+      setShowProgressIndicator(true);
+      
+      // Delay actual stage change to allow for animation
+      setTimeout(() => {
+        setStage('collapse');
+        setShowHint(true); // Show hint for the next stage
+        setHint('Adjust temperature and gravity, then click the ignite button when ready!');
+        setShowProgressIndicator(false);
+      }, 1500);
     }
     
-    // Progress to ignition stage or fail based on temperature and gravity
-    if (stage === 'collapse') {
-      const tempRatio = temperature / TEMPERATURE_TARGET;
-      const gravRatio = gravity / GRAVITY_TARGET;
-      
-      // Check if both values are in extreme ranges (too high)
-      if (tempRatio > 1.7 || gravRatio > 1.7) {
-        // 80% chance of failure if values are extremely high
-        if (Math.random() < 0.8) {
-          setStage('failed');
-          setStarType('failed');
-          setTimeout(() => {
-            setShowSuccess(true); // Reusing success modal but with failure message
-          }, 2000);
-          return;
-        }
-      }
-      
-      // Continue with star formation if within acceptable ranges
-      if (temperature >= TEMPERATURE_TARGET * 0.9 && 
-          gravity >= GRAVITY_TARGET * 0.9) {
-        
-        // Determine star type based on temperature and gravity values
-        determineStarType(temperature, gravity);
-        
-        // Star successfully begins to form
-        setStage('ignition');
-        setShowHint(false);
-        setTimeout(() => {
-          setStage('complete');
-          setShowSuccess(true);
-        }, 5000); // 5-second animation before completion
-      }
-    }
-  }, [resources, temperature, gravity, stage]);
+    // Note: Removed the automatic ignition logic
+    // Star formation now happens only through the manual ignition button
+  }, [resources, stage]);
   
   // Track first collection to update hints
   useEffect(() => {
@@ -96,19 +109,24 @@ export default function StarGame() {
     }
   }, [resources, firstCollection]);
   
-  // Auto-hide hints after some time
+  // Calculate collection rate for visual feedback
   useEffect(() => {
-    if (showHint) {
-      const timer = setTimeout(() => {
-        // Don't auto-hide the initial hint until they start collecting
-        if (firstCollection || stage !== 'collection') {
-          setShowHint(false);
-        }
-      }, 8000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [showHint, firstCollection, stage]);
+    const collectionInterval = setInterval(() => {
+      if (stage === 'collection') {
+        setCollectionRate({
+          hydrogen: resources.hydrogen - lastResources.hydrogen,
+          dust: resources.dust - lastResources.dust
+        });
+        
+        setLastResources({
+          hydrogen: resources.hydrogen,
+          dust: resources.dust
+        });
+      }
+    }, 1000);
+    
+    return () => clearInterval(collectionInterval);
+  }, [resources, stage, lastResources]);
   
   // Determine the type of star created based on temperature and gravity ratios
   const determineStarType = (temp: number, grav: number) => {
@@ -181,9 +199,72 @@ export default function StarGame() {
     }
   };
 
+  // Manual ignition handler
+  const handleIgnition = () => {
+    if (stage !== 'collapse') return;
+    
+    // Determine success or failure based on current values
+    const tempRatio = temperature / TEMPERATURE_TARGET;
+    const gravRatio = gravity / GRAVITY_TARGET;
+    
+    // Show transition animation
+    setShowProgressIndicator(true);
+    
+    // Conditions that affect success chance
+    let successChance = 0.85; // Base 85% success chance
+    
+    // Reduce success chance if values are not optimal
+    if (tempRatio < 0.8 || tempRatio > 1.2) {
+      successChance -= 0.3;
+    }
+    
+    if (gravRatio < 0.8 || gravRatio > 1.2) {
+      successChance -= 0.3;
+    }
+    
+    // Critical failure condition - extremely high values
+    if (tempRatio > 1.7 || gravRatio > 1.7) {
+      successChance = 0.2; // Only 20% chance of success
+    }
+    
+    // Determine outcome
+    if (Math.random() < successChance) {
+      // Success path
+      determineStarType(temperature, gravity);
+      
+      setTimeout(() => {
+        // Star successfully begins to form
+        setStage('ignition');
+        setHint('Fusion has begun! Watch as your star forms...');
+        setShowHint(true);
+        setShowProgressIndicator(false);
+        
+        setTimeout(() => {
+          setShowHint(false);
+          setTimeout(() => {
+            setStage('complete');
+            setShowSuccess(true);
+          }, 4000); // 4-second animation before completion
+        }, 3000);
+      }, 1500);
+    } else {
+      // Failure path
+      setTimeout(() => {
+        setStage('failed');
+        setStarType('failed');
+        setShowProgressIndicator(false);
+        
+        setTimeout(() => {
+          setShowSuccess(true); // Show failure modal
+        }, 1500);
+      }, 1500);
+    }
+  };
+
   const restartGame = () => {
     setStage('collection');
     setResources({ hydrogen: 0, dust: 0 });
+    setLastResources({ hydrogen: 0, dust: 0 });
     setTemperature(0);
     setGravity(0);
     setShowSuccess(false);
@@ -191,6 +272,8 @@ export default function StarGame() {
     setFirstCollection(false);
     setHint('Move your cursor to attract particles');
     setShowHint(true);
+    setShowHelp(false);
+    setCollectionRate({ hydrogen: 0, dust: 0 });
   };
 
   // Get description for current star type
@@ -201,137 +284,218 @@ export default function StarGame() {
       case 'yellow_dwarf':
         return "A medium-sized star like our Sun with balanced temperature and gravity.";
       case 'blue_giant':
-        return "A massive, hot, luminous star that will live fast and die spectacularly.";
+        return "A massive, hot, luminous star that will live fast and die spectacularly in a supernova explosion after only millions of years.";
       case 'neutron_star':
-        return "An incredibly dense remnant of a massive star that collapsed under gravity.";
-      case 'failed':
-        return "The star formation process became unstable and collapsed.";
+        return "An incredibly dense remnant of a massive star that has undergone gravitational collapse. It packs the mass of a star in a city-sized sphere.";
       default:
-        return "";
+        return "A stable star formed through the perfect balance of gravity and fusion pressure.";
     }
   };
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (stage === 'collection' && accessibilityMode) {
+        // Arrow keys to collect particles
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || 
+            e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          // Simulate particle collection in accessibility mode
+          collectHydrogen(1);
+          if (Math.random() < 0.5) collectDust(1);
+          e.preventDefault();
+        }
+      } else if (stage === 'collapse' && accessibilityMode) {
+        // Arrow keys to adjust temperature and gravity
+        if (e.key === 'ArrowUp') {
+          handleTemperatureChange(Math.min(temperature + 5, 150));
+          e.preventDefault();
+        } else if (e.key === 'ArrowDown') {
+          handleTemperatureChange(Math.max(temperature - 5, 0));
+          e.preventDefault();
+        } else if (e.key === 'ArrowRight') {
+          handleGravityChange(Math.min(gravity + 5, 140));
+          e.preventDefault();
+        } else if (e.key === 'ArrowLeft') {
+          handleGravityChange(Math.max(gravity - 5, 0));
+          e.preventDefault();
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          // Add space and enter keys to trigger ignition in accessibility mode
+          if (stage === 'collapse') {
+            handleIgnition();
+          }
+          e.preventDefault();
+        }
+      }
+      
+      // Toggle help with H key
+      if (e.key === 'h' || e.key === 'H') {
+        setShowHelp(prev => !prev);
+        e.preventDefault();
+      }
+      
+      // Toggle accessibility mode with A key
+      if (e.key === 'a' || e.key === 'A') {
+        setAccessibilityMode(prev => !prev);
+        if (!accessibilityMode) {
+          setHint('Accessibility mode activated. Use arrow keys to interact.');
+          setShowHint(true);
+        }
+        e.preventDefault();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [stage, temperature, gravity, accessibilityMode]);
 
+  // Auto-hide hints after some time
+  useEffect(() => {
+    if (showHint) {
+      const timer = setTimeout(() => {
+        // Don't auto-hide the initial hint until they start collecting
+        if (firstCollection || stage !== 'collection') {
+          setShowHint(false);
+        }
+      }, 8000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [showHint, firstCollection, stage]);
+  
   return (
-    <div className="relative w-full h-screen overflow-hidden">
+    <div className="relative w-full h-full flex flex-col items-center justify-center">
       {/* Background nebula */}
-      <Nebula stage={stage} />
-
-      {/* Game stage display */}
-      <div className="absolute top-4 left-4 bg-black/50 text-white px-4 py-2 rounded-lg z-10">
-        {stage === 'collection' && "Stage 1: Cosmic Cloud Formation"}
-        {stage === 'collapse' && "Stage 2: Gravitational Collapse"}
-        {stage === 'ignition' && "Stage 3: Protostar Ignition"}
-        {stage === 'complete' && `Star Formation Complete: ${starType.replace('_', ' ').toUpperCase()}`}
-        {stage === 'failed' && "Star Formation Failed!"}
-      </div>
-
-      {/* Gameplay hints */}
-      {showHint && (
-        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-indigo-900/70 text-white px-6 py-3 rounded-lg z-30 mt-4 shadow-lg border border-indigo-400 animate-pulse">
-          <div className="flex items-center space-x-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p>{hint}</p>
-          </div>
+      <Nebula stage={stage} temperature={temperature} gravity={gravity} />
+      
+      {/* Collection stage */}
+      {stage === 'collection' && (
+        <div className="absolute inset-0 z-10">
+          {/* Hydrogen particles */}
+          <Particle 
+            type="hydrogen"
+            count={30}
+            onCollect={collectHydrogen}
+          />
+          {/* Dust particles */}
+          <Particle
+            type="dust"
+            count={20}
+            onCollect={collectDust}
+          />
         </div>
       )}
-
-      {/* Resource particles - only visible during collection stage */}
-      {stage === 'collection' && (
-        <>
-          <Particle 
-            type="hydrogen" 
-            count={15} 
-            onCollect={collectHydrogen} 
-          />
-          <Particle 
-            type="dust" 
-            count={10} 
-            onCollect={collectDust} 
-          />
-        </>
-      )}
-
-      {/* Progress tracking UI */}
-      <div className="absolute bottom-4 left-4 right-4 bg-black/50 p-4 rounded-lg z-10">
+      
+      {/* Progress indicators and controls */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
         {stage === 'collection' && (
-          <div className="space-y-2">
+          <div className="flex flex-col space-y-2 mb-4">
             <ProgressBar 
               label="Hydrogen" 
-              current={resources.hydrogen} 
-              max={HYDROGEN_TARGET} 
-              color="blue" 
+              value={resources.hydrogen} 
+              maxValue={HYDROGEN_TARGET} 
+              color="blue"
+              rate={collectionRate.hydrogen} 
             />
             <ProgressBar 
               label="Dust" 
-              current={resources.dust} 
-              max={DUST_TARGET} 
-              color="amber" 
+              value={resources.dust} 
+              maxValue={DUST_TARGET} 
+              color="amber"
+              rate={collectionRate.dust} 
             />
-            <div className="flex justify-between items-center mt-2">
-              <p className="text-white text-sm">
-                Move your cursor to collect particles
-              </p>
-              <button 
-                onClick={() => setShowHint(true)} 
-                className="text-indigo-300 text-xs hover:text-indigo-200 focus:outline-none"
-              >
-                Need help?
-              </button>
-            </div>
-          </div>
-        )}
-
-        {stage === 'collapse' && (
-          <>
-            <Controls 
-              temperature={temperature}
-              gravity={gravity}
-              onTemperatureChange={handleTemperatureChange}
-              onGravityChange={handleGravityChange}
-              temperatureTarget={TEMPERATURE_TARGET}
-              gravityTarget={GRAVITY_TARGET}
-            />
-            <div className="flex justify-center mt-1">
-              <button 
-                onClick={() => setShowHint(true)} 
-                className="text-indigo-300 text-xs hover:text-indigo-200 focus:outline-none"
-              >
-                Show hint
-              </button>
-            </div>
-          </>
-        )}
-
-        {(stage === 'ignition' || stage === 'complete') && (
-          <div className="text-center text-white">
-            {stage === 'ignition' ? 
-              "Fusion is beginning! Star is forming..." : 
-              "Congratulations! You've created a star!"}
           </div>
         )}
         
-        {stage === 'failed' && (
-          <div className="text-center text-red-400">
-            <p className="text-lg">The formation process has become unstable!</p>
-            <p className="text-sm mt-1">Too extreme temperature or gravity caused the process to fail.</p>
-          </div>
+        {stage === 'collapse' && (
+          <Controls 
+            temperature={temperature}
+            gravity={gravity}
+            onTemperatureChange={handleTemperatureChange}
+            onGravityChange={handleGravityChange}
+            temperatureTarget={TEMPERATURE_TARGET}
+            gravityTarget={GRAVITY_TARGET}
+            onIgnite={handleIgnition}
+          />
         )}
       </div>
-
-      {/* Warning flash for dangerous values */}
-      {stage === 'collapse' && (temperature > TEMPERATURE_TARGET * 1.5 || gravity > GRAVITY_TARGET * 1.5) && (
-        <div className={`absolute inset-0 bg-red-500/20 pointer-events-none z-5 ${
-          temperature > TEMPERATURE_TARGET * 1.7 || gravity > GRAVITY_TARGET * 1.7 ? 'animate-pulse' : ''
-        }`} />
+      
+      {/* Hints */}
+      {showHint && (
+        <div className="absolute top-8 left-0 right-0 flex justify-center z-30 pointer-events-none">
+          <div className="bg-indigo-900/80 text-white px-6 py-3 rounded-lg shadow-lg text-center max-w-md">
+            {hint}
+          </div>
+        </div>
       )}
-
-      {/* Success or failure modal */}
+      
+      {/* Accessibility mode indicator */}
+      {accessibilityMode && (
+        <div className="absolute top-2 right-2 bg-blue-600 text-white px-2 py-1 rounded text-xs z-30">
+          Accessibility Mode
+        </div>
+      )}
+      
+      {/* Help button */}
+      <button
+        onClick={() => setShowHelp(prev => !prev)}
+        className="absolute top-4 right-4 bg-indigo-700 hover:bg-indigo-600 text-white w-8 h-8 rounded-full flex items-center justify-center z-30"
+        aria-label="Help"
+      >
+        ?
+      </button>
+      
+      {/* Help panel */}
+      {showHelp && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-40">
+          <div className="bg-indigo-900 text-white p-6 rounded-lg max-w-md mx-4">
+            <h2 className="text-xl font-bold mb-4">{HELP_CONTENT[stage === 'complete' || stage === 'failed' ? 'ignition' : stage].title}</h2>
+            <ul className="list-disc pl-5 space-y-2">
+              {HELP_CONTENT[stage === 'complete' || stage === 'failed' ? 'ignition' : stage].content.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ul>
+            <div className="mt-6 border-t border-indigo-700 pt-4">
+              <p className="text-sm mb-2"><strong>Keyboard Controls:</strong></p>
+              <ul className="text-sm list-disc pl-5 space-y-1">
+                <li>Press <strong>H</strong> to toggle this help panel</li>
+                <li>Press <strong>A</strong> to toggle accessibility mode</li>
+                {accessibilityMode && (
+                  <>
+                    <li>Use <strong>Arrow Keys</strong> to interact with the game</li>
+                  </>
+                )}
+              </ul>
+            </div>
+            <button
+              onClick={() => setShowHelp(false)}
+              className="mt-6 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded"
+            >
+              Close Help
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Loading indicator between stages */}
+      {showProgressIndicator && (
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-white mt-4 text-lg">
+              {stage === 'collection' 
+                ? 'Gravitational collapse beginning...'
+                : stage === 'collapse'
+                  ? 'Ignition sequence initiating...'
+                  : 'Finalizing star formation...'}
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* Success/failure modal */}
       {showSuccess && (
         <SuccessModal 
           onRestart={restartGame} 
-          success={starType !== 'failed'}
+          success={stage !== 'failed'} 
           starType={starType}
           starDescription={getStarTypeDescription()}
         />
